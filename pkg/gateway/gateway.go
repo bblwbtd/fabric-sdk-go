@@ -17,6 +17,7 @@ SPDX-License-Identifier: Apache-2.0
 package gateway
 
 import (
+	"github.com/hyperledger/fabric-sdk-go/pkg/client/ledger"
 	"os"
 	"strings"
 	"time"
@@ -65,10 +66,6 @@ type ConfigOption = func(*Gateway) error
 
 // IdentityOption specifies the user identity under which all transactions are performed for this gateway instance.
 type IdentityOption = func(*Gateway) error
-
-func (gw *Gateway) GetSDK() *fabsdk.FabricSDK {
-	return gw.sdk
-}
 
 // Connect to a gateway defined by a network config file.
 // Must specify a config option, an identity option and zero or more strategy options.
@@ -257,6 +254,17 @@ func WithBlockNum(from uint64) Option {
 	}
 }
 
+func (gw *Gateway) getChannelProvider(name string) context.ChannelProvider {
+	var channelProvider context.ChannelProvider
+	if gw.options.Identity != nil {
+		channelProvider = gw.sdk.ChannelContext(name, fabsdk.WithIdentity(gw.options.Identity), fabsdk.WithOrg(gw.org))
+	} else {
+		channelProvider = gw.sdk.ChannelContext(name, fabsdk.WithUser(gw.options.User), fabsdk.WithOrg(gw.org))
+	}
+
+	return channelProvider
+}
+
 // GetNetwork returns an object representing a network channel.
 //
 //	Parameters:
@@ -265,13 +273,13 @@ func WithBlockNum(from uint64) Option {
 //	Returns:
 //	A Network object representing the channel
 func (gw *Gateway) GetNetwork(name string) (*Network, error) {
-	var channelProvider context.ChannelProvider
-	if gw.options.Identity != nil {
-		channelProvider = gw.sdk.ChannelContext(name, fabsdk.WithIdentity(gw.options.Identity), fabsdk.WithOrg(gw.org))
-	} else {
-		channelProvider = gw.sdk.ChannelContext(name, fabsdk.WithUser(gw.options.User), fabsdk.WithOrg(gw.org))
-	}
+	channelProvider := gw.getChannelProvider(name)
 	return newNetwork(gw, channelProvider)
+}
+
+func (gw *Gateway) GetLedgerClient(name string) (*ledger.Client, error) {
+	channelProvider := gw.getChannelProvider(name)
+	return ledger.New(channelProvider)
 }
 
 // Close the gateway connection and all associated resources, including removing listeners attached to networks and
